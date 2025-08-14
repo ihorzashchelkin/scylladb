@@ -40,7 +40,9 @@ namespace locator {
 
 network_topology_strategy::network_topology_strategy(replication_strategy_params params) :
         abstract_replication_strategy(params,
-                                      replication_strategy_type::network_topology) {
+                                      replication_strategy_type::network_topology),
+        _rep_local_dc_only{false}
+{
     auto opts = _config_options;
     process_tablet_options(*this, opts, params);
 
@@ -56,6 +58,11 @@ network_topology_strategy::network_topology_strategy(replication_strategy_params
         if (boost::iequals(key, "class")) {
             continue;
         }
+
+	if (boost::equals(key, "replication_local_dc_only")) {
+	    _rep_local_dc_only = boost::iequals(val, "true");
+	    continue;
+	}
 
         if (boost::iequals(key, "replication_factor")) {
             if (boost::equals(key, "replication_factor")) {
@@ -192,7 +199,7 @@ class natural_endpoints_tracker {
     size_t _dcs_to_fill;
 
 public:
-    natural_endpoints_tracker(const token_metadata& tm, const std::unordered_map<sstring, size_t>& dc_rep_factor)
+    natural_endpoints_tracker(const token_metadata& tm, const std::unordered_map<sstring, size_t>& dc_rep_factor, bool _rep_local_dc_only)
         : _tm(tm)
         , _tp(_tm.get_topology())
         , _dc_rep_factor(dc_rep_factor)
@@ -207,6 +214,8 @@ public:
             return i != map.end() ? i->second.size() : size_t(0);
         };
 
+	auto& local_dc = tm.get_topology().get_datacenter();
+
         // Create a data_center_endpoints object for each non-empty DC.
         for (auto& [dc, rf] : _dc_rep_factor) {
             auto node_count = size_for(_token_owners, dc);
@@ -214,10 +223,13 @@ public:
             if (rf == 0 || node_count == 0) {
                 continue;
             }
+	    if (_rep_local_dc_only && dc != local_dc) {
+		continue;
+	    }
 
             _dcs.emplace(dc, data_center_endpoints(rf, size_for(_racks, dc), node_count, _replicas, _seen_racks));
-            _dcs_to_fill = _dcs.size();
         }
+	_dcs_to_fill = _dcs.size();
     }
 
     bool add_endpoint_and_check_if_done(host_id ep) {
@@ -256,7 +268,7 @@ future<host_id_set>
 network_topology_strategy::calculate_natural_endpoints(
     const token& search_token, const token_metadata& tm) const {
 
-    natural_endpoints_tracker tracker(tm, _dc_rep_factor);
+    natural_endpoints_tracker tracker(tm, _dc_rep_factor, _rep_local_dc_only);
 
     for (auto& next : tm.ring_range(search_token)) {
         co_await coroutine::maybe_yield();
@@ -281,6 +293,12 @@ void network_topology_strategy::validate_options(const gms::feature_service& fs,
             on_internal_error(rslogger, fmt::format("'replication_factor' tag should be unrolled into a list of DC:RF by now."
                                                     "_config_options:{}", _config_options));
         }
+	if (c.first == sstring("replication_local_dc_only")) {
+	    if (boost::iequals(c.second, "true") || boost::iequals(c.second, "false")) {
+		continue;
+	    }
+	    throw exceptions::configuration_exception(format("replication_local_dc_only must be true or false."));
+	}
         if (!dcs.contains(c.first)) {
             throw exceptions::configuration_exception(format("Unrecognized strategy option {{{}}} "
                 "passed to NetworkTopologyStrategy", this->to_qualified_class_name(c.first)));

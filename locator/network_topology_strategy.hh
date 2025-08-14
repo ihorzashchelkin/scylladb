@@ -73,5 +73,6 @@ private:
 
     std::vector<sstring> _datacenteres;
     size_t _rep_factor;
+    bool _rep_local_dc_only;
 };
 } // namespace locator
