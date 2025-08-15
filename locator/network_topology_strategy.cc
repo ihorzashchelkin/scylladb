@@ -59,10 +59,10 @@ network_topology_strategy::network_topology_strategy(replication_strategy_params
             continue;
         }
 
-	if (boost::equals(key, "replication_local_dc_only")) {
-	    _rep_local_dc_only = boost::iequals(val, "true");
-	    continue;
-	}
+        if (boost::equals(key, "replication_local_dc_only")) {
+            _rep_local_dc_only = boost::iequals(val, "true");
+            continue;
+        }
 
         if (boost::iequals(key, "replication_factor")) {
             if (boost::equals(key, "replication_factor")) {
@@ -214,7 +214,7 @@ public:
             return i != map.end() ? i->second.size() : size_t(0);
         };
 
-	auto& local_dc = tm.get_topology().get_datacenter();
+        auto& local_dc = tm.get_topology().get_datacenter();
 
         // Create a data_center_endpoints object for each non-empty DC.
         for (auto& [dc, rf] : _dc_rep_factor) {
@@ -223,13 +223,13 @@ public:
             if (rf == 0 || node_count == 0) {
                 continue;
             }
-	    if (_rep_local_dc_only && dc != local_dc) {
-		continue;
-	    }
+            if (_rep_local_dc_only && dc != local_dc) {
+                continue;
+            }
 
             _dcs.emplace(dc, data_center_endpoints(rf, size_for(_racks, dc), node_count, _replicas, _seen_racks));
         }
-	_dcs_to_fill = _dcs.size();
+        _dcs_to_fill = _dcs.size();
     }
 
     bool add_endpoint_and_check_if_done(host_id ep) {
@@ -293,12 +293,14 @@ void network_topology_strategy::validate_options(const gms::feature_service& fs,
             on_internal_error(rslogger, fmt::format("'replication_factor' tag should be unrolled into a list of DC:RF by now."
                                                     "_config_options:{}", _config_options));
         }
-	if (c.first == sstring("replication_local_dc_only")) {
-	    if (boost::iequals(c.second, "true") || boost::iequals(c.second, "false")) {
-		continue;
-	    }
-	    throw exceptions::configuration_exception(format("replication_local_dc_only must be true or false."));
-	}
+
+        if (c.first == sstring("replication_local_dc_only")) {
+            if (boost::iequals(c.second, "true") || boost::iequals(c.second, "false")) {
+                continue;
+            }
+            throw exceptions::configuration_exception(format("replication_local_dc_only must be true or false."));
+        }
+
         if (!dcs.contains(c.first)) {
             throw exceptions::configuration_exception(format("Unrecognized strategy option {{{}}} "
                 "passed to NetworkTopologyStrategy", this->to_qualified_class_name(c.first)));
